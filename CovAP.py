@@ -590,6 +590,6 @@ def update_analysis(parameter):
 
 # In[87]:
 
-
-app.run_server(debug=debug)
+if __name__ == '__main__':
+	app.run_server(debug=debug)
 
