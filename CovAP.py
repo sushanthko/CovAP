@@ -3,13 +3,13 @@
 
 # # COVID-19 Analysis Platform
 
-# In[1754]:
+# In[66]:
 
 
 from jupyter_dash import JupyterDash
 
 
-# In[1755]:
+# In[67]:
 
 
 import dash
@@ -21,25 +21,25 @@ import dash_table as dt
 from dash.dependencies import Input, Output
 
 
-# In[1756]:
+# In[68]:
 
 
 debug = pd.read_json("properties.json", orient="index").debug.value
 
 
-# In[1757]:
+# In[69]:
 
 
 df = pd.read_csv("owid-covid-data.csv")
 
 
-# In[1758]:
+# In[70]:
 
 
 countries = df.location.unique()
 
 
-# In[1759]:
+# In[71]:
 
 
 dpm_countries = 20
@@ -58,27 +58,29 @@ dfm = dfmain[['iso_code', 'location', 'total_cases_per_million', 'total_deaths_p
 dfm = dfm[~dfm.iso_code.isin(['OWID_WRL'])] # Remove world row for map
 
 
-# In[1760]:
+# In[72]:
 
 
 header = html.H1("CovAP dashboard")
 last_updated = html.H6("Last updated on: "+df.date.max(),className="text-right")
 
 
-# In[1761]:
+# In[73]:
 
 
 # Daily stats tab content
 daily_stats_div = html.Div([
     
-    html.Div(html.Div(html.Label("Select country"), className="col"), className="row"),
+    html.Div([
+        html.Div(html.Label("Select country"), className="col-auto"),
         
-    html.Div(html.Div(dcc.Dropdown(
+        html.Div(dcc.Dropdown(
             id='country-input',
             options=[{'label': i, 'value': i} for i in countries],
             value='Norway',
             clearable=False,
-    ), className="col-3"), className="row"),
+    ), className="col-4"),
+    ], className="row mt-2"),
     
     html.Div([
         
@@ -93,7 +95,33 @@ daily_stats_div = html.Div([
 ], className="container-fluid")
 
 
-# In[1762]:
+# In[74]:
+
+
+# Comparison tab content
+comparison_div = html.Div([
+    
+    html.Div([
+        html.Div(html.Label("Select one or more countries"), className="col-auto"),
+        html.Div(dcc.Dropdown(
+            id='multi-country-input',
+            options=[{'label': i, 'value': i} for i in countries],
+            value=['Norway', 'Sweden', 'Denmark', 'Finland'],
+            clearable=False,
+            multi=True,
+    ), className="col-4"),
+    ], className="row mt-2"),
+    
+    html.Div([
+        
+        html.Div(dcc.Graph(id='comparison'), className="col")
+        
+    ], className="row align-items-center"),
+    
+], className="container-fluid")
+
+
+# In[75]:
 
 
 def getFormat(column):
@@ -115,7 +143,7 @@ def getTitleText(text):
     return text.title().replace('_', ' ')
 
 
-# In[1763]:
+# In[76]:
 
 
 world_table = dt.DataTable(
@@ -162,7 +190,7 @@ world_table = dt.DataTable(
 )
 
 
-# In[1764]:
+# In[77]:
 
 
 # World data tab cotent
@@ -248,7 +276,7 @@ world_data_div = html.Div([
 ], className="container-fluid")
 
 
-# In[1765]:
+# In[78]:
 
 
 # Analysis tab content
@@ -270,7 +298,7 @@ analysis_div = html.Div([
 ], className="container-fluid")
 
 
-# In[1766]:
+# In[79]:
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -294,6 +322,7 @@ app.layout = html.Div([
             world_data_div
         ]),
         dcc.Tab(label='Comparison', children=[
+            comparison_div
         ]),
         dcc.Tab(label='Analysis', children=[
             analysis_div
@@ -304,7 +333,7 @@ app.layout = html.Div([
 ], className="container-fluid")
 
 
-# In[1767]:
+# In[80]:
 
 
 def get_empty_graph(text):
@@ -365,7 +394,7 @@ def get_daily_graph(x, y, text):
     }
 
 
-# In[1768]:
+# In[81]:
 
 
 # Daily stats tab callback
@@ -386,7 +415,7 @@ def update_daily_stats(country):
             get_daily_graph(dff.date, dff.new_tests,"Daily New Tests"))
 
 
-# In[1769]:
+# In[82]:
 
 
 # Map callback
@@ -443,7 +472,7 @@ def display_map(map_type):
     }
 
 
-# In[1770]:
+# In[83]:
 
 
 def get_click_data(clickData):
@@ -465,7 +494,7 @@ def get_click_data(clickData):
             dfcountry.total_deaths.apply(int_formatter), dfcountry.total_deaths_per_million.apply(float_formatter))
 
 
-# In[1771]:
+# In[84]:
 
 
 # Map click callback
@@ -488,7 +517,7 @@ def display_click_data(clickData, clicks):
         return get_click_data(clickData)
 
 
-# In[1772]:
+# In[85]:
 
 
 # World table callback
@@ -502,8 +531,8 @@ def update_table(table_type):
     columns = {}
     sort_by = {}
     if(table_type == None or len(table_type) == 0):
-        data=dft.to_dict('records')
-        columns=[{'id': c, 'name': getTitleText(c), "type": getType(c), 'format': getFormat(c)} for c in dft.columns]
+        data=dftt.to_dict('records')
+        columns=[{'id': c, 'name': getTitleText(c), "type": getType(c), 'format': getFormat(c)} for c in dftt.columns]
         sort_by=[{"column_id": 'total_deaths', "direction": "desc"}]
     else:
         data=dftm.to_dict('records')
@@ -513,7 +542,7 @@ def update_table(table_type):
     return data, columns, sort_by
 
 
-# In[1773]:
+# In[86]:
 
 
 # Analysis tab callback
@@ -559,8 +588,8 @@ def update_analysis(parameter):
     return figure
 
 
-# In[1774]:
+# In[87]:
 
-if __name__ == '__main__':
-    app.run_server(debug=debug)
+
+app.run_server(debug=debug)
 
