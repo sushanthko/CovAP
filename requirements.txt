@@ -1,0 +1,7 @@
+jupyter_dash
+dash
+dash_core_components
+dash_html_components
+pandas
+dash_bootstrap_components
+dash_table
