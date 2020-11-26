@@ -3,13 +3,13 @@
 
 # # COVID-19 Analysis Platform
 
-# In[66]:
+# In[25]:
 
 
 from jupyter_dash import JupyterDash
 
 
-# In[67]:
+# In[26]:
 
 
 import dash
@@ -21,58 +21,87 @@ import dash_table as dt
 from dash.dependencies import Input, Output
 
 
-# In[68]:
+# In[27]:
 
 
 debug = pd.read_json("properties.json", orient="index").debug.value
 
 
-# In[69]:
+# In[28]:
 
 
 df = pd.read_csv("owid-covid-data.csv")
 
 
-# In[70]:
+# In[29]:
 
 
 countries = df.location.unique()
 
 
-# In[71]:
+# In[30]:
 
 
 dpm_countries = 20
 world_code = "OWID_WRL"
 
-null_fill_columns = {'new_cases': 0, 'new_deaths': 0, 'total_cases': 0, 'total_deaths': 0}
-null_columns = ['new_cases', 'new_deaths', 'total_cases', 'total_deaths', 'total_cases_per_million', 'total_deaths_per_million']
+null_fill_columns = {'new_cases': 0, 'new_deaths': 0, 'total_cases': 0, 'total_deaths': 0,
+                     'total_cases_per_million': 0, 'total_deaths_per_million' : 0, 
+                     'new_cases_smoothed': 0, 'new_cases_smoothed_per_million': 0, 'new_deaths_smoothed': 0, 
+                     'new_deaths_smoothed_per_million': 0}
+
+numeric_columns = ['new_cases', 'new_deaths', 'total_cases', 'total_deaths', 'total_cases_per_million',
+                'total_deaths_per_million']
+
+df = df.fillna(null_fill_columns)
 
 dfmain = df[df.groupby(['location']).date.transform('max') == df.date]
 dfmain = dfmain.fillna(null_fill_columns)
 
-dftt = dfmain[['location', 'continent', 'total_cases', 'total_deaths']]
-dftm = dfmain[['location', 'continent', 'total_cases_per_million', 'total_deaths_per_million']]
+dft = dfmain[['location', 'continent', 'total_cases', 'total_deaths']]
+dftpm = dfmain[['location', 'continent', 'total_cases_per_million', 'total_deaths_per_million']]
 
-dfm = dfmain[['iso_code', 'location', 'total_cases_per_million', 'total_deaths_per_million']]
-dfm = dfm[~dfm.iso_code.isin(['OWID_WRL'])] # Remove world row for map
+dfmain_no_world = dfmain[~dfmain.iso_code.isin(['OWID_WRL'])] # Remove world row for map
+dfm = dfmain_no_world[['iso_code', 'location', 'total_cases_per_million', 'total_deaths_per_million']]
 
 
-# In[72]:
+# In[31]:
 
 
 header = html.H1("CovAP dashboard")
 last_updated = html.H6("Last updated on: "+df.date.max(),className="text-right")
 
 
-# In[73]:
+# In[32]:
+
+
+def getFormat(column):
+    if(column in numeric_columns):
+        if("per_million" in column):
+            return {'specifier': ',.2f'}
+        else:
+            return {'specifier': ',.0f'}
+    return None
+
+    
+def getType(column):
+    if(column in numeric_columns):
+        return "numeric"
+    return "text"
+
+
+def getTitleText(text):
+    return text.title().replace('_', ' ').replace("Gdp", "GDP")
+
+
+# In[33]:
 
 
 # Daily stats tab content
 daily_stats_div = html.Div([
     
     html.Div([
-        html.Div(html.Label("Select country"), className="col-auto"),
+        html.Div(html.Label("Select location"), className="col-auto"),
         
         html.Div(dcc.Dropdown(
             id='country-input',
@@ -95,55 +124,7 @@ daily_stats_div = html.Div([
 ], className="container-fluid")
 
 
-# In[74]:
-
-
-# Comparison tab content
-comparison_div = html.Div([
-    
-    html.Div([
-        html.Div(html.Label("Select one or more countries"), className="col-auto"),
-        html.Div(dcc.Dropdown(
-            id='multi-country-input',
-            options=[{'label': i, 'value': i} for i in countries],
-            value=['Norway', 'Sweden', 'Denmark', 'Finland'],
-            clearable=False,
-            multi=True,
-    ), className="col-4"),
-    ], className="row mt-2"),
-    
-    html.Div([
-        
-        html.Div(dcc.Graph(id='comparison'), className="col")
-        
-    ], className="row align-items-center"),
-    
-], className="container-fluid")
-
-
-# In[75]:
-
-
-def getFormat(column):
-    if(column in null_columns):
-        if("per_million" in column):
-            return {'specifier': ',.2f'}
-        else:
-            return {'specifier': ',.0f'}
-    return None
-
-    
-def getType(column):
-    if(column in null_columns):
-        return "numeric"
-    return "text"
-
-
-def getTitleText(text):
-    return text.title().replace('_', ' ')
-
-
-# In[76]:
+# In[34]:
 
 
 world_table = dt.DataTable(
@@ -190,10 +171,11 @@ world_table = dt.DataTable(
 )
 
 
-# In[77]:
+# In[35]:
 
 
 # World data tab cotent
+map_options = ['total_deaths_per_million', 'total_cases_per_million']
 world_data_div = html.Div([
     
     html.Div([
@@ -201,14 +183,12 @@ world_data_div = html.Div([
         html.Div(html.Div([
             
             html.Div(html.Div(
-                    dcc.RadioItems(
+                dcc.RadioItems(
                     id='map-type',
-                    options=[{'label': getTitleText(i), 'value': i}
-                             for i in ['total_deaths_per_million', 'total_cases_per_million']],
-                    value='total_deaths_per_million',
-                    labelStyle={'display': 'inline-block', 'margin':'0 1%'}
-                ),
-                className="col"), className="row"),
+                    options=[{'label': getTitleText(i), 'value': i} for i in map_options ],
+                    value=map_options[0],
+                    labelClassName="mr-2"
+                ), className="col"), className="row mt-2"),
             
             html.Div(html.Div(dcc.Graph(id='world-map'), className="col"), className="row"),
             
@@ -261,12 +241,14 @@ world_data_div = html.Div([
         html.Div(html.Div([
             html.Div([
                 
-                html.Div(html.H4("Reported cases and deaths by country", className="mt-2"), className="col-auto"),
+                html.Div(html.H4("Reported cases and deaths by country"), className="col-auto"),
                 html.Div(
-                    dcc.Checklist(id="table-type", options=[{'label': 'Per Million', 'value': 'per_million'}],
-                                 labelStyle={'display': 'inline-block', 'margin':'0'}),
-                    className="col d-flex align-items-center justify-content-start mt-2"),
-            ], className="row"),
+                    dcc.Checklist(
+                        id="table-type", 
+                        options=[{'label': 'Per Million People', 'value': 'per_million'}], 
+                        labelClassName="m-0"
+                    ), className="col d-flex align-items-center justify-content-start"),
+            ], className="row mt-2"),
             
             html.Div(html.Div(world_table, className="col overflow-auto"), className="row"),
             
@@ -276,29 +258,73 @@ world_data_div = html.Div([
 ], className="container-fluid")
 
 
-# In[78]:
+# In[36]:
 
 
-# Analysis tab content
-analysis_div = html.Div([
+# Comparison tab content
+comparison_options = ['new_cases_smoothed', 'new_cases_smoothed_per_million', 'new_deaths_smoothed',
+                      'new_deaths_smoothed_per_million']
+comparison_div = html.Div([
     
-    html.Div(html.Div(
-        html.H2("Analysis of top " +str(dpm_countries)+" countries with highest deaths per million"),
-        className="col"), className="row"),
+    html.Div([
+        html.Div(html.Label("Select one or more locations"), className="col-auto"),
+        html.Div(dcc.Dropdown(
+            id='multi-country-input',
+            options=[{'label': i, 'value': i} for i in countries],
+            value=['Norway', 'Sweden', 'Denmark', 'Finland'],
+            clearable=False,
+            multi=True,
+    ), className="col-4"),
+        html.Div(
+            dcc.RadioItems(
+                id="comparison-type", 
+                options=[{'label': getTitleText(c), 'value': c} for c in comparison_options],
+                           value = comparison_options[0],
+                          labelClassName="mr-2"), 
+            className="col-auto")
+    ], className="row mt-2"),
     
-    html.Div(html.Div(dcc.RadioItems(
-                id='parameter',
-                options=[{'label': i, 'value': i} for i in ['Hospital beds per thousand', 'Aged 65 or older(%)']],
-                value='Hospital beds per thousand',
-#                 labelStyle={'display': 'inline-block'}
-            ), className="col"), className="row"),
-    
-    html.Div(html.Div(dcc.Graph(id='deaths-per-million'), className="col"), className="row"),
+    html.Div(html.Div(dcc.Graph(id='comparison-plot'), className="col"), className="row align-items-center"),
     
 ], className="container-fluid")
 
 
-# In[79]:
+# In[37]:
+
+
+# Analysis tab content
+analysis_measures = ["population", "population_density", "gdp_per_capita", "extreme_poverty", "cardiovasc_death_rate",
+                     "diabetes_prevalence", "life_expectancy", "human_development_index"]
+
+analysis_div = html.Div([
+        
+    html.Div([
+            html.Div(html.Label("Metric"), className="col-auto"),
+            html.Div(dcc.Dropdown(
+                id='select-property',
+                options=[
+                    {'label': getTitleText(prop), 'value': prop} for prop in analysis_measures
+                ],
+                value="gdp_per_capita",
+            ), className="col-4"),
+            
+            html.Div(
+                dcc.Checklist(
+                        id="analysis-options", 
+                        options=[
+                            {'label': 'Sort Reverse', 'value': 'sort_reverse'},
+                            {'label': 'Per Million People', 'value': 'per_million'},
+                        ],
+                        labelClassName="mr-2"
+            ), className="col-auto"),
+    ], className="row mt-2"),
+    
+    html.Div(html.Div(dcc.Graph(id='analysis-plot'), className="col"), className="row align-items-center"),
+    
+], className="container-fluid")
+
+
+# In[38]:
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -333,7 +359,7 @@ app.layout = html.Div([
 ], className="container-fluid")
 
 
-# In[80]:
+# In[39]:
 
 
 def get_empty_graph(text):
@@ -394,7 +420,7 @@ def get_daily_graph(x, y, text):
     }
 
 
-# In[81]:
+# In[40]:
 
 
 # Daily stats tab callback
@@ -406,16 +432,63 @@ def get_daily_graph(x, y, text):
 [
     Input('country-input', 'value'),
 ])
-def update_daily_stats(country):
+def update_daily_stats(location):
 
-    dff = df[df.location == country]
+    dff = df[df.location == location]
        
     return (get_daily_graph(dff.date, dff.new_cases,"Daily New Cases"),
             get_daily_graph(dff.date, dff.new_deaths,"Daily New Deaths"),
             get_daily_graph(dff.date, dff.new_tests,"Daily New Tests"))
 
 
-# In[82]:
+# In[41]:
+
+
+# Comparison tab callback
+@app.callback(Output('comparison-plot', 'figure'), [
+        Input('multi-country-input', 'value'),
+        Input('comparison-type', 'value'),
+    ])
+def update_comparison_plot(locations, comparison_type):
+#     return get_comparison_plot(locations, comparison_type, getTitleText(comparison_type) + " (7-day smoothed)")
+    data = []
+    
+    for location in locations:
+        dfc = df[df.location == location]
+        sub_data = dict(
+            x=dfc.date,
+            y=dfc[comparison_type],
+            type='scatter',
+            name=location,
+            hovertemplate="%{y:,.2f}",
+        )
+        data.append(sub_data)
+        
+    return {
+            'data': data,
+            'layout': dict(
+            margin={'l': 40, 'b': 30, 't': 60, 'r': 0},
+            hovermode='x unified',
+            title={
+            'text': getTitleText(comparison_type) + " (7-day smoothed)",
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top',
+            'font': dict(size=20),
+            },
+            hoverlabel=dict(
+                bgcolor="white",
+                font=dict(
+                    size=16,
+                    family="Rockwell"
+                ),
+            ),
+        )
+    }
+
+
+# In[42]:
 
 
 # Map callback
@@ -472,7 +545,7 @@ def display_map(map_type):
     }
 
 
-# In[83]:
+# In[43]:
 
 
 def get_click_data(clickData):
@@ -494,7 +567,7 @@ def get_click_data(clickData):
             dfcountry.total_deaths.apply(int_formatter), dfcountry.total_deaths_per_million.apply(float_formatter))
 
 
-# In[84]:
+# In[44]:
 
 
 # Map click callback
@@ -517,7 +590,7 @@ def display_click_data(clickData, clicks):
         return get_click_data(clickData)
 
 
-# In[85]:
+# In[45]:
 
 
 # World table callback
@@ -531,64 +604,89 @@ def update_table(table_type):
     columns = {}
     sort_by = {}
     if(table_type == None or len(table_type) == 0):
-        data=dftt.to_dict('records')
-        columns=[{'id': c, 'name': getTitleText(c), "type": getType(c), 'format': getFormat(c)} for c in dftt.columns]
+        data=dft.to_dict('records')
+        columns=[{'id': c, 'name': getTitleText(c), "type": getType(c), 'format': getFormat(c)} for c in dft.columns]
         sort_by=[{"column_id": 'total_deaths', "direction": "desc"}]
     else:
-        data=dftm.to_dict('records')
+        data=dftpm.to_dict('records')
         columns=[{'id': c, 'name': getTitleText(c.replace("total", "")),
-                  "type": getType(c), 'format': getFormat(c)} for c in dftm.columns]
+                  "type": getType(c), 'format': getFormat(c)} for c in dftpm.columns]
         sort_by=[{"column_id": 'total_deaths_per_million', "direction": "desc"}]
     return data, columns, sort_by
 
 
-# In[86]:
+# In[46]:
 
 
-# Analysis tab callback
+# Analysis rank table callback
 @app.callback(
-    dash.dependencies.Output('deaths-per-million', 'figure'),
-[
-    dash.dependencies.Input('parameter', 'value')
-])
-def update_analysis(parameter):
-    test = df[['location', 'date', 'total_deaths_per_million', 'hospital_beds_per_thousand', 'aged_65_older', 'population']]
-    test = test[test.groupby(['location']).date.transform('max') == df.date]
-    data = test.dropna().reset_index().sort_values("total_deaths_per_million", ascending=False).head(dpm_countries)
+    Output('analysis-plot', 'figure'),
+    [
+        Input('select-property', 'value'),
+        Input('analysis-options', 'value'),
+    ]
+)
+def update_analysis_graph(analysis_type, options):
+    data = []
+    number_of_countries = 10
+    asc = False
+    column = "new_deaths_smoothed"
+    top = "Top"
+    per_million = ""
+    if(options != None):
+        if("sort_reverse" in options):
+            asc = True
+            top = "Bottom"
+        if("per_million" in options):
+            column = "new_deaths_smoothed_per_million"
+            per_million = "per million people"
+
+    dfa = dfmain_no_world.sort_values(analysis_type, ascending=asc).head(number_of_countries)
+    locations = dfa.location
     
-    y = data.hospital_beds_per_thousand
-    if(parameter == "Aged 65 or older(%)"):
-        y = data.aged_65_older
-    
-    figure =  {
-        'data': [
-                dict(
-            x=data.location,
-            y=y,
-#             name=parameter,
-#             customdata='Total deaths per million: '+str(data.total_deaths_per_million),
-            type='bar',
-#             mode='markers',
-            marker={
-#                 'size': 25,
-#                 'opacity': 0.7,
-                'color': 'orange',
-#                 'line': {'width': 2, 'color': 'purple'}
+    for location in locations:
+        dfc = df[df.location == location]
+        sub_data = dict(
+            x=dfc.date,
+            y=dfc[column],
+            type='scatter',
+            name=location,
+            hovertemplate="%{y:,.2f}",
+        )
+        data.append(sub_data)
+        
+    return {
+            'data': data,
+            'layout': dict(
+            margin={'l': 40, 'b': 30, 't': 60, 'r': 0},
+            hovermode='x unified',
+            title={
+            'text': "Daily New Confirmed COVID-19 Deaths (7-day smoothed) ",
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top',
+            'font': dict(size=20),
             },
-            hovertext="Total deaths per million: "+data.total_deaths_per_million.round(2).astype(str),
-        )],
-        'layout': dict(
-#             margin={'l': 40, 'b': 30, 't': 10, 'r': 0},
-#             height=450,
-#             hovermode='closest',
-            title= parameter
+            hoverlabel=dict(
+                bgcolor="white",
+                font=dict(
+                    size=16,
+                    family="Rockwell"
+                ),
+            ),
+            legend=dict(
+                title=dict(
+                    text=getTitleText(analysis_type) +" ("+
+                    top +" "+ str(number_of_countries) +")",
+                )
+            ),
         )
     }
-    
-    return figure
 
 
-# In[87]:
+# In[47]:
+
 
 if __name__ == '__main__':
 	app.run_server(debug=debug)
