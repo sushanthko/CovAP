@@ -6,3 +6,6 @@ dash_html_components
 pandas
 dash_bootstrap_components
 dash_table
+statsmodels
+pmdarima
+fbprophet
