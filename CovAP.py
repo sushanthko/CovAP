@@ -3,13 +3,13 @@
 
 # # COVID-19 Analysis Platform
 
-# In[44]:
+# In[430]:
 
 
 from jupyter_dash import JupyterDash
 
 
-# In[45]:
+# In[431]:
 
 
 import dash
@@ -25,25 +25,25 @@ import warnings
 from fbprophet import Prophet
 
 
-# In[46]:
+# In[432]:
 
 
 debug = pd.read_json("properties.json", orient="index").debug.value
 
 
-# In[47]:
+# In[433]:
 
 
 df = pd.read_csv("owid-covid-data.csv")
 
 
-# In[48]:
+# In[434]:
 
 
 countries = df.location.unique()
 
 
-# In[49]:
+# In[435]:
 
 
 world_code = "OWID_WRL"
@@ -68,7 +68,7 @@ dfmain_no_world = dfmain[~dfmain.iso_code.isin(['OWID_WRL'])] # Remove world row
 dfm = dfmain_no_world[['iso_code', 'location', 'total_cases_per_million', 'total_deaths_per_million']]
 
 
-# In[50]:
+# In[436]:
 
 
 # Alcohol sales data
@@ -108,7 +108,7 @@ alcohol_sales_pure_alcohol = alcohol_sales_pure_alcohol.rename(
 alcohol_sales = alcohol_sales.drop(alcohol_sales.index[0])
 
 
-# In[51]:
+# In[437]:
 
 
 # Trips data
@@ -124,7 +124,7 @@ domestic_trips = trips[trips["type of trip"] == "Total trips domestic"]
 domestic_trips = domestic_trips.drop(domestic_trips.index[0])
 
 
-# In[52]:
+# In[438]:
 
 
 # Predictions data
@@ -132,7 +132,7 @@ predictions = pd.read_csv("predictions.csv")
 # predictions
 
 
-# In[53]:
+# In[439]:
 
 
 def getFormat(column):
@@ -154,27 +154,30 @@ def getTitleText(text):
     return text.title().replace('_', ' ').replace("Gdp", "GDP")
 
 
-# In[54]:
+# In[440]:
 
 
 def replace_negatives(series):
     return series.mask(series.lt(0), 0)
 
 
-# In[55]:
+# In[441]:
 
 
 header = html.H1("CovAP dashboard")
 last_updated = html.H6("Last updated on: "+df.date.max(),className="text-right")
 
 
-# In[56]:
+# In[442]:
 
 
 comparison_options = ['new_cases_smoothed', 'new_cases_smoothed_per_million', 'new_deaths_smoothed',
                       'new_deaths_smoothed_per_million']
 
 location_comparison_div = html.Div([
+    html.Div(html.Div(html.H4("Comparison of COVID-19 outbreak by location"), className="col p-0"),
+             className="row mt-2"),
+    
     html.Div([
         html.Div(html.Label("Select one or more locations"), className="col-auto p-0"),
         
@@ -186,99 +189,77 @@ location_comparison_div = html.Div([
             multi=True,
         ), className="col-4"),
         
-    ], className="row mt-2"),
-        
-    html.Div([
-        html.Div(html.Label("Select a category for comparison"), className="col-auto p-0"),
+        html.Div(html.Label("Select a category"), className="col-auto p-0"),
         
         html.Div(
-            dcc.RadioItems(
+            dcc.Dropdown(
                 id="comparison-type", 
                 options=[{'label': getTitleText(c), 'value': c} for c in comparison_options],
-                           value = comparison_options[0],
-                          labelClassName="mr-2"), 
-            className="col-auto"),
+                value = comparison_options[0],
+                clearable=False,
+            ), className="col-4"),
         
-    ], className="row"),
+    ], className="row mb-2"),
     
-    html.Div(html.Div(dcc.Graph(id='comparison-plot'), className="col"), className="row align-items-center"),
+    html.Div(html.Div(dcc.Graph(id='comparison-plot'), className="col border border-dark"),
+             className="row align-items-center"),
     
 ], className="container-fluid")
 
 
-# In[57]:
+# In[443]:
 
 
 # Metric Analysis tab content
-analysis_measures = ["population", "population_density", "gdp_per_capita", "extreme_poverty", "cardiovasc_death_rate",
-                     "diabetes_prevalence", "life_expectancy", "human_development_index", "median_age"]
+dot_measures = ["population", "population_density", "gdp_per_capita", "extreme_poverty", "cardiovasc_death_rate",
+                "diabetes_prevalence", "life_expectancy", "human_development_index", "median_age", "stringency_index"]
 
-analysis_measures.sort()
+dot_measures.sort()
 
-analysis_div = html.Div([
+default_analysis_type = dot_measures[2]
+
+analysis_locations = dfmain_no_world[~dfmain_no_world[default_analysis_type].isna()].location
+analysis_locations_list = analysis_locations.tolist()
+first_location = "" if len(analysis_locations_list) == 0 else analysis_locations_list[0]
+default_location = "Norway" if "Norway" in analysis_locations_list else first_location
+
+dot_div = html.Div([
+    html.Div(html.Div(html.H4("Analysis of COVID-19 prevalence with location wise metrics"), className="col p-0"),
+             className="row mt-2"),
         
     html.Div([
             html.Div(html.Label("Select a metric"), className="col-auto p-0"),
             html.Div(dcc.Dropdown(
-                id='select-property',
+                id='dot-metric',
                 options=[
-                    {'label': getTitleText(prop), 'value': prop} for prop in analysis_measures
+                    {'label': getTitleText(prop), 'value': prop} for prop in dot_measures
                 ],
                 value="gdp_per_capita",
             ), className="col-4"),
             
-            html.Div(
-                dcc.Checklist(
-                        id="analysis-options", 
-                        options=[
-                            {'label': 'Sort Reverse', 'value': 'sort_reverse'},
-                            {'label': 'Per Million People', 'value': 'per_million'},
-                        ],
-                        labelClassName="mr-2"
-            ), className="col-auto"),
-    ], className="row mt-2"),
-    
-    html.Div(html.Div(dcc.Graph(id='analysis-plot'), className="col"), className="row align-items-center"),
-    
-], className="container-fluid")
-
-
-# In[58]:
-
-
-# Analysis/Comparison tab content
-comparison_div = html.Div([
-    html.Div(html.Div(html.H4("Comparison of COVID-19 outbreak by location and different metrics"), className="col p-0"),
-             className="row mt-2"),
+            html.Div(html.Label("Select a location to highlight"), className="col-auto p-0"),
+        
+            html.Div(dcc.Dropdown(
+                id='hightlight-input',
+                options=[
+                    {'label': location, 'value': location} for location in analysis_locations
+                ],
+                value=default_location,
+            ), className="col-4"),
+        
+    ], className="row mb-2"),
     
     html.Div([
-        html.Div(html.Label("Select a comparison type"), className="col-auto p-0"),
+        html.Div(dcc.Graph(id='total-dot-plot'), className="col border border-dark"),
         
-        html.Div(
-        dcc.RadioItems(
-            id='comparison-category',
-            options=[
-                {'label': "Metric", 'value': "metric"},
-                {'label': "Location", 'value': "location"},
-            ],
-            value="metric",
-            labelClassName="mr-2",
-        ), className="col")
+        html.Div(dcc.Graph(id='dot-plot'), className="col border-top border-right border-bottom border-dark"),
         
-    ], className="row"),
-    
-    html.Div(html.Div(
-        location_comparison_div, className="col border border-dark", id="comparison-div"),
-             className="row"),
-    
-    html.Div(html.Div(
-        analysis_div, className="col border border-dark", id="analysis-div"),
-             className="row"),
+    ], className="row align-items-center"),
     
 ], className="container-fluid")
 
 
-# In[59]:
+# In[444]:
 
 
 # Daily stats tab content
@@ -310,7 +291,7 @@ daily_stats_div = html.Div([
 ], className="container-fluid")
 
 
-# In[60]:
+# In[445]:
 
 
 world_table = dt.DataTable(
@@ -360,7 +341,7 @@ world_table = dt.DataTable(
 )
 
 
-# In[61]:
+# In[446]:
 
 
 map_details_div = html.Div([
@@ -423,7 +404,7 @@ map_details_div = html.Div([
 ], className="container-fluid")
 
 
-# In[62]:
+# In[447]:
 
 
 # World data tab content
@@ -489,7 +470,7 @@ world_data_div = html.Div([
 ], className="container-fluid")
 
 
-# In[63]:
+# In[448]:
 
 
 # Predictions tab content
@@ -527,7 +508,7 @@ predictions_div = html.Div([
 ], className="container-fluid")
 
 
-# In[64]:
+# In[449]:
 
 
 # Datasets tab content
@@ -585,7 +566,7 @@ datasets_div = html.Div([
 ],className="container-fluid")
 
 
-# In[65]:
+# In[450]:
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -614,7 +595,10 @@ app.layout = html.Div([
             world_data_div
         ]),
         dcc.Tab(label='Metric Analysis', children=[
-            comparison_div
+            dot_div
+        ]),
+        dcc.Tab(label='Location Comparison', children=[
+            location_comparison_div
         ]),
         dcc.Tab(label='Impact Study', children=[
             datasets_div
@@ -626,22 +610,7 @@ app.layout = html.Div([
 ], className="container-fluid")
 
 
-# In[66]:
-
-
-# Comparison Type callback
-@app.callback([
-    Output('comparison-div', 'style'),
-    Output('analysis-div', 'style'),
-], Input('comparison-category', 'value'))
-def set_comparison_type_plot(comparison_type):
-    if (comparison_type == "location"):
-        return {"display": "block"}, {"display": "none"}
-    else:
-        return {"display": "none"}, {"display": "block"}
-
-
-# In[67]:
+# In[451]:
 
 
 # World Type callback
@@ -656,7 +625,7 @@ def set_world_type_plot(world_type):
         return {"display": "none"}, {"display": "block"}
 
 
-# In[68]:
+# In[452]:
 
 
 def get_empty_graph(text):
@@ -717,7 +686,7 @@ def get_daily_graph(x, y, text, color):
     }
 
 
-# In[69]:
+# In[453]:
 
 
 # Daily stats tab callback
@@ -738,7 +707,7 @@ def update_daily_stats(location):
             get_daily_graph(dff.date, dff.new_tests,"Daily New Tests", "deepskyblue"))
 
 
-# In[70]:
+# In[454]:
 
 
 alcohol_hovertemplate="%{y} litres<extra></extra>"
@@ -839,7 +808,7 @@ def get_alcohol_sales_trend():
     }
 
 
-# In[71]:
+# In[455]:
 
 
 # Alcohol sales callback
@@ -851,7 +820,7 @@ def update_alcohol_sales_plot(alcohol_stats_type):
         return get_alcohol_sales_trend()
 
 
-# In[72]:
+# In[456]:
 
 
 trips_hovertemplate="%{y} million<extra></extra>"
@@ -952,7 +921,7 @@ def get_trips_trend():
     }
 
 
-# In[73]:
+# In[457]:
 
 
 # Trips callback
@@ -964,7 +933,7 @@ def update_alcohol_sales_plot(alcohol_stats_type):
         return get_trips_trend()
 
 
-# In[74]:
+# In[458]:
 
 
 # Comparison tab callback
@@ -986,6 +955,12 @@ def update_comparison_plot(locations, comparison_type):
         )
         data.append(sub_data)
         
+    legend = dict(
+        title=dict(
+            text="Selected Locations",
+        )
+    )
+        
     return {
             'data': data,
             'layout': dict(
@@ -1006,11 +981,12 @@ def update_comparison_plot(locations, comparison_type):
                     family="Rockwell"
                 ),
             ),
+                legend=legend,
         )
     }
 
 
-# In[75]:
+# In[459]:
 
 
 # Map callback
@@ -1053,21 +1029,21 @@ def display_map(map_type):
             hovertemplate="%{z:,.2f}<br>%{text}<extra></extra>"
         )],
         'layout': dict(
-#             margin={'l': 40, 'b': 30, 't': 60, 'r': 0},
+            margin={'l': 40, 'b': 30, 't': 60, 'r': 0},
             hovermode='closest',
             title={
             'text': text,
-#             'y':0.9,
-#             'x':0.5,
-#             'xanchor': 'center',
-#             'yanchor': 'top',
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top',
             'font': dict(size=20)
             },
         )
     }
 
 
-# In[76]:
+# In[460]:
 
 
 def get_click_data(clickData):
@@ -1089,7 +1065,7 @@ def get_click_data(clickData):
             dfcountry.total_deaths.apply(int_formatter), dfcountry.total_deaths_per_million.apply(float_formatter))
 
 
-# In[77]:
+# In[461]:
 
 
 # Map click callback
@@ -1112,77 +1088,7 @@ def display_click_data(clickData, clicks):
         return get_click_data(clickData)
 
 
-# In[78]:
-
-
-# Analysis rank table callback
-@app.callback(
-    Output('analysis-plot', 'figure'),
-    [
-        Input('select-property', 'value'),
-        Input('analysis-options', 'value'),
-    ]
-)
-def update_analysis_graph(analysis_type, options):
-    data = []
-    number_of_countries = 5
-    asc = False
-    column = "new_deaths_smoothed"
-    top = "Top"
-    per_million = ""
-    if(options != None):
-        if("sort_reverse" in options):
-            asc = True
-            top = "Bottom"
-        if("per_million" in options):
-            column = "new_deaths_smoothed_per_million"
-            per_million = "per million people"
-
-    dfa = dfmain_no_world.sort_values(analysis_type, ascending=asc).head(number_of_countries)
-    locations = dfa.location
-    
-    for location in locations:
-        dfc = df[df.location == location]
-        sub_data = dict(
-            x=dfc.date,
-            y=dfc[column],
-            type='scatter',
-            name=location,
-            hovertemplate="%{y:,.2f}",
-        )
-        data.append(sub_data)
-        
-    return {
-            'data': data,
-            'layout': dict(
-            margin={'l': 40, 'b': 30, 't': 60, 'r': 0},
-            hovermode='x unified',
-            title={
-            'text': "Daily New Confirmed COVID-19 Deaths (7-day smoothed) ",
-            'y':0.9,
-            'x':0.5,
-            'xanchor': 'center',
-            'yanchor': 'top',
-            'font': dict(size=20),
-            },
-            hoverlabel=dict(
-                bgcolor="white",
-                font=dict(
-                    size=16,
-                    family="Rockwell"
-                ),
-            ),
-            legend=dict(
-                title=dict(
-                    text=getTitleText(analysis_type) +" ("+
-                    top +" "+ str(number_of_countries) +")",
-                )
-            ),
-        )
-    }
-
-
-# In[79]:
+# In[462]:
 
 
 # Predictions tab callback
@@ -1325,7 +1231,121 @@ def update_prediction_plots(location, prediction_column):
     return figure_arima, figure_prophet
 
 
-# In[80]:
+# In[463]:
+
+
+def get_dot_graph(analysis_type, hightlight, column, title_text, hoverTemplate, color, highlight_color):
+    dfd = dfmain_no_world[dfmain_no_world.location != hightlight]
+    dfh = dfmain_no_world[dfmain_no_world.location == hightlight]
+    
+    return {
+            'data': [
+                dict(
+                    x=dfd[analysis_type],
+                    y=dfd[column],
+                    type='scatter',
+                    marker={
+                            'color': color,
+                        },
+                    name=dfd.location,
+                    hovertemplate= dfd.location +"<extra></extra><br>"+ hoverTemplate,
+                    mode="markers",
+                    showlegend=False,
+                ),
+                dict(
+                    x=dfh[analysis_type],
+                    y=dfh[column],
+                    type='scatter',
+                    marker={
+                            'color': highlight_color,
+                            "size": 18,
+                        },
+                    name=dfh.location,
+                    hovertemplate= dfh.location +"<extra></extra><br>"+ hoverTemplate,
+                    mode="markers",
+                    showlegend=False,
+                )
+            ],
+            'layout': dict(
+            margin={'l': 40, 'b': 30, 't': 60, 'r': 0},
+            hovermode='closest',
+            title={
+                'text': title_text,
+                'y':0.9,
+                'x':0.5,
+                'xanchor': 'center',
+                'yanchor': 'top',
+                'font': dict(size=20),
+            },
+            hoverlabel=dict(
+                bgcolor="white",
+                font=dict(
+                    size=16,
+                    family="Rockwell"
+                ),
+            ),
+                xaxis=dict(
+                    title=getTitleText(analysis_type)
+                ),
+                yaxis=dict(
+                    title=getTitleText(column)
+                ),
+        )
+    }
+
+
+# In[464]:
+
+
+# Dot plot callbacks
+@app.callback(Output('dot-plot', 'figure'),[
+    Input('dot-metric', 'value'),
+    Input('hightlight-input', 'value'),
+])
+def update_total_dot_graph(analysis_type, hightlight):
+    column = "total_cases_per_million"
+    
+    hoverTemplate = getTitleText(analysis_type) +": %{x:,.2f}<br>%{y:,.2f} cases per million people"
+    
+    if(analysis_type == "population"):
+        hoverTemplate = getTitleText(analysis_type) +": %{x:,.0f}<br>%{y:,.2f} cases per million people"
+    
+    title_text = getTitleText(analysis_type) +" Vs Total COVID-19 Cases Per Million"
+    
+    return get_dot_graph(analysis_type, hightlight, column, title_text, hoverTemplate, "burlywood", "darkred")
+
+@app.callback(Output('total-dot-plot', 'figure'),[
+    Input('dot-metric', 'value'),
+    Input('hightlight-input', 'value'),
+])
+def update_dot_graph(analysis_type, hightlight):
+    column = "total_deaths_per_million"
+    
+    hoverTemplate = getTitleText(analysis_type) +": %{x:,.2f}<br>%{y:,.2f} deaths per million people"
+    
+    if(analysis_type == "population"):
+        hoverTemplate = getTitleText(analysis_type) +": %{x:,.0f}<br>%{y:,.2f} deaths per million people"
+    
+    title_text = getTitleText(analysis_type) +" Vs Total COVID-19 Deaths Per Million"
+    
+    return get_dot_graph(analysis_type, hightlight, column, title_text, hoverTemplate, "deepskyblue", "darkviolet")
+
+@app.callback([
+    Output('hightlight-input', 'options'),
+    Output('hightlight-input', 'value'),
+], Input('dot-metric', 'value'))
+def update_highlight_locations(analysis_type):
+    analysis_locations = dfmain_no_world[~dfmain_no_world[analysis_type].isna()].location
+    analysis_locations_list = analysis_locations.tolist()
+    first_location = "" if len(analysis_locations_list) == 0 else analysis_locations_list[0]
+    default_location = "Norway" if "Norway" in analysis_locations_list else first_location
+    
+    return [
+        {'label': location, 'value': location} for location in analysis_locations
+    ], default_location
+
+
+# In[465]:
 
 
 # Reference: https://github.com/nachi-hebbar/ARIMA-Temperature_Forecasting
@@ -1361,7 +1381,7 @@ def predict_arima(df, country, column):
     return prediction
 
 
-# In[81]:
+# In[466]:
 
 
 # Reference: https://machinelearningmastery.com/time-series-forecasting-with-prophet-in-python/
@@ -1389,7 +1409,7 @@ def predict_prophet(df, country, column):
     return forecast["yhat"], forecast["yhat_upper"], forecast["yhat_lower"],
 
 
-# In[82]:
+# In[467]:
 
 
 def predict():    
@@ -1400,6 +1420,12 @@ def predict():
     
     countries = ["Norway", "Sweden", "Finland", "Denmark", "Iceland"]
     dfd = dfd[dfd.location.isin(countries)]
+    
+    pred_max = pd.to_datetime(predictions[predictions.predictor.isna()].date.max())
+    df_max = pd.to_datetime(dfd.index.max())
+    if(pred_max == df_max):
+        return "Up to date"
+
     dfr = dfd.reset_index()
     dfp = dfr[["date", "location", "new_cases_smoothed", "new_deaths_smoothed"]].copy()
     dfp["predictor"] = ""
@@ -1427,11 +1453,19 @@ def predict():
         dfp = dfp.append(dfj, ignore_index=True)
         
     dfp.to_csv("predictions.csv", index=False)
+    return "Updated"
 
 
-# In[83]:
+# In[468]:
 
 
 if __name__ == '__main__':
 	app.run_server(debug=debug)
+# app.run_server(debug=False)
+
+
+# In[469]:
+
+
+# predict()
 
