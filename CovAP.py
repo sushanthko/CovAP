@@ -3,13 +3,13 @@
 
 # # COVID-19 Analysis Platform
 
-# In[1]:
+# In[44]:
 
 
 from jupyter_dash import JupyterDash
 
 
-# In[2]:
+# In[45]:
 
 
 import dash
@@ -25,28 +25,27 @@ import warnings
 from fbprophet import Prophet
 
 
-# In[3]:
+# In[46]:
 
 
 debug = pd.read_json("properties.json", orient="index").debug.value
 
 
-# In[4]:
+# In[47]:
 
 
 df = pd.read_csv("owid-covid-data.csv")
 
 
-# In[5]:
+# In[48]:
 
 
 countries = df.location.unique()
 
 
-# In[6]:
+# In[49]:
 
 
-dpm_countries = 20
 world_code = "OWID_WRL"
 
 null_fill_columns = {'new_cases': 0, 'new_deaths': 0, 'total_cases': 0, 'total_deaths': 0,
@@ -62,8 +61,6 @@ df = df.fillna(null_fill_columns)
 dfmain = df[df.groupby(['location']).date.transform('max') == df.date]
 dfmain = dfmain.fillna(null_fill_columns)
 
-# dft = dfmain[['location', 'continent', 'total_cases', 'total_deaths']]
-# dftpm = dfmain[['location', 'continent', 'total_cases_per_million', 'total_deaths_per_million']]
 dft = dfmain[['location', 'continent', 'total_cases', 'total_cases_per_million',
                 'total_deaths', 'total_deaths_per_million']]
 
@@ -71,7 +68,7 @@ dfmain_no_world = dfmain[~dfmain.iso_code.isin(['OWID_WRL'])] # Remove world row
 dfm = dfmain_no_world[['iso_code', 'location', 'total_cases_per_million', 'total_deaths_per_million']]
 
 
-# In[7]:
+# In[50]:
 
 
 # Alcohol sales data
@@ -111,7 +108,7 @@ alcohol_sales_pure_alcohol = alcohol_sales_pure_alcohol.rename(
 alcohol_sales = alcohol_sales.drop(alcohol_sales.index[0])
 
 
-# In[8]:
+# In[51]:
 
 
 # Trips data
@@ -127,7 +124,7 @@ domestic_trips = trips[trips["type of trip"] == "Total trips domestic"]
 domestic_trips = domestic_trips.drop(domestic_trips.index[0])
 
 
-# In[9]:
+# In[52]:
 
 
 # Predictions data
@@ -135,7 +132,7 @@ predictions = pd.read_csv("predictions.csv")
 # predictions
 
 
-# In[10]:
+# In[53]:
 
 
 def getFormat(column):
@@ -157,21 +154,131 @@ def getTitleText(text):
     return text.title().replace('_', ' ').replace("Gdp", "GDP")
 
 
-# In[11]:
+# In[54]:
 
 
 def replace_negatives(series):
     return series.mask(series.lt(0), 0)
 
 
-# In[12]:
+# In[55]:
 
 
 header = html.H1("CovAP dashboard")
 last_updated = html.H6("Last updated on: "+df.date.max(),className="text-right")
 
 
-# In[13]:
+# In[56]:
+
+
+comparison_options = ['new_cases_smoothed', 'new_cases_smoothed_per_million', 'new_deaths_smoothed',
+                      'new_deaths_smoothed_per_million']
+
+location_comparison_div = html.Div([
+    html.Div([
+        html.Div(html.Label("Select one or more locations"), className="col-auto p-0"),
+        
+        html.Div(dcc.Dropdown(
+            id='multi-country-input',
+            options=[{'label': i, 'value': i} for i in countries],
+            value=['Norway', 'Sweden', 'Denmark', 'Finland'],
+            clearable=False,
+            multi=True,
+        ), className="col-4"),
+        
+    ], className="row mt-2"),
+        
+    html.Div([
+        html.Div(html.Label("Select a category for comparison"), className="col-auto p-0"),
+        
+        html.Div(
+            dcc.RadioItems(
+                id="comparison-type", 
+                options=[{'label': getTitleText(c), 'value': c} for c in comparison_options],
+                           value = comparison_options[0],
+                          labelClassName="mr-2"), 
+            className="col-auto"),
+        
+    ], className="row"),
+    
+    html.Div(html.Div(dcc.Graph(id='comparison-plot'), className="col"), className="row align-items-center"),
+    
+], className="container-fluid")
+
+
+# In[57]:
+
+
+# Metric Analysis tab content
+analysis_measures = ["population", "population_density", "gdp_per_capita", "extreme_poverty", "cardiovasc_death_rate",
+                     "diabetes_prevalence", "life_expectancy", "human_development_index", "median_age"]
+
+analysis_measures.sort()
+
+analysis_div = html.Div([
+        
+    html.Div([
+            html.Div(html.Label("Select a metric"), className="col-auto p-0"),
+            html.Div(dcc.Dropdown(
+                id='select-property',
+                options=[
+                    {'label': getTitleText(prop), 'value': prop} for prop in analysis_measures
+                ],
+                value="gdp_per_capita",
+            ), className="col-4"),
+            
+            html.Div(
+                dcc.Checklist(
+                        id="analysis-options", 
+                        options=[
+                            {'label': 'Sort Reverse', 'value': 'sort_reverse'},
+                            {'label': 'Per Million People', 'value': 'per_million'},
+                        ],
+                        labelClassName="mr-2"
+            ), className="col-auto"),
+    ], className="row mt-2"),
+    
+    html.Div(html.Div(dcc.Graph(id='analysis-plot'), className="col"), className="row align-items-center"),
+    
+], className="container-fluid")
+
+
+# In[58]:
+
+
+# Analysis/Comparison tab content
+comparison_div = html.Div([
+    html.Div(html.Div(html.H4("Comparison of COVID-19 outbreak by location and different metrics"), className="col p-0"),
+             className="row mt-2"),
+    
+    html.Div([
+        html.Div(html.Label("Select a comparison type"), className="col-auto p-0"),
+        
+        html.Div(
+        dcc.RadioItems(
+            id='comparison-category',
+            options=[
+                {'label': "Metric", 'value': "metric"},
+                {'label': "Location", 'value': "location"},
+            ],
+            value="metric",
+            labelClassName="mr-2",
+        ), className="col")
+        
+    ], className="row"),
+    
+    html.Div(html.Div(
+        location_comparison_div, className="col border border-dark", id="comparison-div"),
+             className="row"),
+    
+    html.Div(html.Div(
+        analysis_div, className="col border border-dark", id="analysis-div"),
+             className="row"),
+    
+], className="container-fluid")
+
+
+# In[59]:
 
 
 # Daily stats tab content
@@ -188,22 +295,22 @@ daily_stats_div = html.Div([
             value='Norway',
             clearable=False,
     ), className="col-4"),
-    ], className="row"),
+    ], className="row mb-2"),
     
     html.Div([
         
-        html.Div(dcc.Graph(id='daily-cases'), className="col"),
+        html.Div(dcc.Graph(id='daily-cases'), className="col border border-dark"),
         
-        html.Div(dcc.Graph(id='daily-deaths'), className="col"),
+        html.Div(dcc.Graph(id='daily-deaths'), className="col border-top border-right border-bottom border-dark"),
         
-        html.Div(dcc.Graph(id='daily-tests'), className="col"),
+        html.Div(dcc.Graph(id='daily-tests'), className="col border-top border-right border-bottom border-dark"),
         
     ], className="row align-items-center"),
     
 ], className="container-fluid")
 
 
-# In[14]:
+# In[60]:
 
 
 world_table = dt.DataTable(
@@ -253,7 +360,7 @@ world_table = dt.DataTable(
 )
 
 
-# In[15]:
+# In[61]:
 
 
 map_details_div = html.Div([
@@ -316,7 +423,7 @@ map_details_div = html.Div([
 ], className="container-fluid")
 
 
-# In[16]:
+# In[62]:
 
 
 # World data tab content
@@ -356,14 +463,12 @@ world_data_div = html.Div([
                                 value=map_options[0],
                                 labelClassName="mr-2"
                             ), className="col"),
-                        ],className="row"),
+                        ],className="row mt-2"),
                     
                     html.Div([
                         
                         html.Div(dcc.Graph(id='world-map'), className="col-8 p-0"),
                         
-#                         html.Div([#details_div         
-#                         ], className="col d-flex align-items-center justify-content-center p-0"),
                         html.Div(map_details_div, className="col d-flex align-items-center justify-content-center p-0"),
                         
                     ], className="row align-items-center"),
@@ -375,47 +480,16 @@ world_data_div = html.Div([
                     
                 ], className="container-fluid"),
                 
-            ], className="col", id="world-map-div", style={"display": "block"}),  
+            ], className="col border border-dark", id="world-map-div",),  
         
-        html.Div(world_table, className="col", id="world-table-div", style={"display": "none"}),   
+        html.Div(world_table, className="col border border-dark", id="world-table-div",),   
             
     ], className="row"),
         
 ], className="container-fluid")
 
 
-# In[17]:
-
-
-# Comparison tab content
-comparison_options = ['new_cases_smoothed', 'new_cases_smoothed_per_million', 'new_deaths_smoothed',
-                      'new_deaths_smoothed_per_million']
-comparison_div = html.Div([
-    
-    html.Div([
-        html.Div(html.Label("Select one or more locations"), className="col-auto p-0"),
-        html.Div(dcc.Dropdown(
-            id='multi-country-input',
-            options=[{'label': i, 'value': i} for i in countries],
-            value=['Norway', 'Sweden', 'Denmark', 'Finland'],
-            clearable=False,
-            multi=True,
-    ), className="col-4"),
-        html.Div(
-            dcc.RadioItems(
-                id="comparison-type", 
-                options=[{'label': getTitleText(c), 'value': c} for c in comparison_options],
-                           value = comparison_options[0],
-                          labelClassName="mr-2"), 
-            className="col-auto")
-    ], className="row mt-2"),
-    
-    html.Div(html.Div(dcc.Graph(id='comparison-plot'), className="col"), className="row align-items-center"),
-    
-], className="container-fluid")
-
-
-# In[18]:
+# In[63]:
 
 
 # Predictions tab content
@@ -440,55 +514,20 @@ predictions_div = html.Div([
                            value = prediction_columns[0],
                           labelClassName="mr-2"), 
             className="col-auto")
-    ], className="row"),
+    ], className="row mb-2"),
     
     html.Div([
         
-        html.Div(dcc.Graph(id='prediction-new-cases'), className="col"),
+        html.Div(dcc.Graph(id='prediction-new-cases'), className="col border border-dark"),
         
-        html.Div(dcc.Graph(id='prediction-new-deaths'), className="col"),
+        html.Div(dcc.Graph(id='prediction-new-deaths'), className="col border-top border-right border-bottom border-dark"),
         
     ], className="row align-items-center"),
     
 ], className="container-fluid")
 
 
-# In[19]:
-
-
-# Analysis tab content
-analysis_measures = ["population", "population_density", "gdp_per_capita", "extreme_poverty", "cardiovasc_death_rate",
-                     "diabetes_prevalence", "life_expectancy", "human_development_index"]
-
-analysis_div = html.Div([
-        
-    html.Div([
-            html.Div(html.Label("Metric"), className="col-auto p-0"),
-            html.Div(dcc.Dropdown(
-                id='select-property',
-                options=[
-                    {'label': getTitleText(prop), 'value': prop} for prop in analysis_measures
-                ],
-                value="gdp_per_capita",
-            ), className="col-4"),
-            
-            html.Div(
-                dcc.Checklist(
-                        id="analysis-options", 
-                        options=[
-                            {'label': 'Sort Reverse', 'value': 'sort_reverse'},
-                            {'label': 'Per Million People', 'value': 'per_million'},
-                        ],
-                        labelClassName="mr-2"
-            ), className="col-auto"),
-    ], className="row mt-2"),
-    
-    html.Div(html.Div(dcc.Graph(id='analysis-plot'), className="col"), className="row align-items-center"),
-    
-], className="container-fluid")
-
-
-# In[20]:
+# In[64]:
 
 
 # Datasets tab content
@@ -500,7 +539,7 @@ datasets_div = html.Div([
         html.Div(
             html.Div([
                 html.Div([
-                    html.Div(html.Label("Select a category"), className="col-auto p-0"),
+                    html.Div(html.Label("Select a category"), className="col-auto pr-0"),
                     
                     html.Div(
                         dcc.RadioItems(
@@ -515,12 +554,12 @@ datasets_div = html.Div([
                     html.Div(html.Div(dcc.Graph(id='alcohol-stats'), className="col"),
                              className="row align-items-center"),
 
-                ], className="container-fluid"), className="col p-0"),
+                ], className="container-fluid"), className="col p-0 border border-dark"),
 
         html.Div(
             html.Div([
                 html.Div([
-                    html.Div(html.Label("Select a category"), className="col-auto p-0"),
+                    html.Div(html.Label("Select a category"), className="col-auto pr-0"),
                     
                     html.Div(
                         dcc.RadioItems(
@@ -535,7 +574,7 @@ datasets_div = html.Div([
                     html.Div(html.Div(dcc.Graph(id='trips-stats'), className="col"), 
                          className="row align-items-center"),
 
-                ], className="container-fluid"), className="col  p-0"),
+                ], className="container-fluid"), className="col p-0 border-top border-right border-bottom border-dark"),
     
     ], className="row"),
     
@@ -546,7 +585,7 @@ datasets_div = html.Div([
 ],className="container-fluid")
 
 
-# In[21]:
+# In[65]:
 
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -574,11 +613,8 @@ app.layout = html.Div([
         dcc.Tab(label='World Data', children=[
             world_data_div
         ]),
-        dcc.Tab(label='Comparison', children=[
-            comparison_div
-        ]),
         dcc.Tab(label='Metric Analysis', children=[
-            analysis_div
+            comparison_div
         ]),
         dcc.Tab(label='Impact Study', children=[
             datasets_div
@@ -590,7 +626,22 @@ app.layout = html.Div([
 ], className="container-fluid")
 
 
-# In[22]:
+# In[66]:
+
+
+# Comparison Type callback
+@app.callback([
+    Output('comparison-div', 'style'),
+    Output('analysis-div', 'style'),
+], Input('comparison-category', 'value'))
+def set_comparison_type_plot(comparison_type):
+    if (comparison_type == "location"):
+        return {"display": "block"}, {"display": "none"}
+    else:
+        return {"display": "none"}, {"display": "block"}
+
+
+# In[67]:
 
 
 # World Type callback
@@ -598,14 +649,14 @@ app.layout = html.Div([
     Output('world-map-div', 'style'),
     Output('world-table-div', 'style'),
 ], Input('world-type', 'value'))
-def update_alcohol_sales_plot(world_type):
+def set_world_type_plot(world_type):
     if (world_type == "map"):
         return {"display": "block"}, {"display": "none"}
     else:
         return {"display": "none"}, {"display": "block"}
 
 
-# In[23]:
+# In[68]:
 
 
 def get_empty_graph(text):
@@ -666,7 +717,7 @@ def get_daily_graph(x, y, text, color):
     }
 
 
-# In[24]:
+# In[69]:
 
 
 # Daily stats tab callback
@@ -687,7 +738,7 @@ def update_daily_stats(location):
             get_daily_graph(dff.date, dff.new_tests,"Daily New Tests", "deepskyblue"))
 
 
-# In[25]:
+# In[70]:
 
 
 alcohol_hovertemplate="%{y} litres<extra></extra>"
@@ -788,7 +839,7 @@ def get_alcohol_sales_trend():
     }
 
 
-# In[26]:
+# In[71]:
 
 
 # Alcohol sales callback
@@ -800,7 +851,7 @@ def update_alcohol_sales_plot(alcohol_stats_type):
         return get_alcohol_sales_trend()
 
 
-# In[27]:
+# In[72]:
 
 
 trips_hovertemplate="%{y} million<extra></extra>"
@@ -901,7 +952,7 @@ def get_trips_trend():
     }
 
 
-# In[28]:
+# In[73]:
 
 
 # Trips callback
@@ -913,7 +964,7 @@ def update_alcohol_sales_plot(alcohol_stats_type):
         return get_trips_trend()
 
 
-# In[29]:
+# In[74]:
 
 
 # Comparison tab callback
@@ -959,7 +1010,7 @@ def update_comparison_plot(locations, comparison_type):
     }
 
 
-# In[30]:
+# In[75]:
 
 
 # Map callback
@@ -1016,7 +1067,7 @@ def display_map(map_type):
     }
 
 
-# In[31]:
+# In[76]:
 
 
 def get_click_data(clickData):
@@ -1038,7 +1089,7 @@ def get_click_data(clickData):
             dfcountry.total_deaths.apply(int_formatter), dfcountry.total_deaths_per_million.apply(float_formatter))
 
 
-# In[32]:
+# In[77]:
 
 
 # Map click callback
@@ -1061,32 +1112,7 @@ def display_click_data(clickData, clicks):
         return get_click_data(clickData)
 
 
-# In[33]:
-
-
-# # World table callback
-# @app.callback([
-#     Output('world-table', 'data'),
-#     Output('world-table', 'columns'),
-#     Output('world-table', 'sort_by'),
-# ], Input('table-type', 'value'))
-# def update_table(table_type):
-#     data = []
-#     columns = {}
-#     sort_by = {}
-#     if(table_type == None or len(table_type) == 0):
-#         data=dft.to_dict('records')
-#         columns=[{'id': c, 'name': getTitleText(c), "type": getType(c), 'format': getFormat(c)} for c in dft.columns]
-#         sort_by=[{"column_id": 'total_deaths', "direction": "desc"}]
-#     else:
-#         data=dftpm.to_dict('records')
-#         columns=[{'id': c, 'name': getTitleText(c.replace("total", "")),
-#                   "type": getType(c), 'format': getFormat(c)} for c in dftpm.columns]
-#         sort_by=[{"column_id": 'total_deaths_per_million', "direction": "desc"}]
-#     return data, columns, sort_by
-
-
-# In[34]:
+# In[78]:
 
 
 # Analysis rank table callback
@@ -1099,7 +1125,7 @@ def display_click_data(clickData, clicks):
 )
 def update_analysis_graph(analysis_type, options):
     data = []
-    number_of_countries = 10
+    number_of_countries = 5
     asc = False
     column = "new_deaths_smoothed"
     top = "Top"
@@ -1156,7 +1182,7 @@ def update_analysis_graph(analysis_type, options):
     }
 
 
-# In[35]:
+# In[79]:
 
 
 # Predictions tab callback
@@ -1299,7 +1325,7 @@ def update_prediction_plots(location, prediction_column):
     return figure_arima, figure_prophet
 
 
-# In[36]:
+# In[80]:
 
 
 # Reference: https://github.com/nachi-hebbar/ARIMA-Temperature_Forecasting
@@ -1335,7 +1361,7 @@ def predict_arima(df, country, column):
     return prediction
 
 
-# In[37]:
+# In[81]:
 
 
 # Reference: https://machinelearningmastery.com/time-series-forecasting-with-prophet-in-python/
@@ -1363,7 +1389,7 @@ def predict_prophet(df, country, column):
     return forecast["yhat"], forecast["yhat_upper"], forecast["yhat_lower"],
 
 
-# In[38]:
+# In[82]:
 
 
 def predict():    
@@ -1403,13 +1429,8 @@ def predict():
     dfp.to_csv("predictions.csv", index=False)
 
 
-# In[39]:
+# In[83]:
 
-
-# predict()
-
-
-# In[40]:
 
 if __name__ == '__main__':
 	app.run_server(debug=debug)
