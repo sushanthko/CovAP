@@ -1,2 +1,2 @@
 # CovAP
-Data Processing and Visualization using owid-covid-data.
+COVID-19 Analysis Platform
