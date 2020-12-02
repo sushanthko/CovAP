@@ -1,2 +1,2 @@
 # CovAP
-COVID-19 Analysis Platform
+COVID-19 Analysis Platform using Dash.
